@@ -16,8 +16,7 @@ function normalizeData(rows) {
 
 module.exports.init = function(dbUrl) {
   var hbase = require('./database').initHbase(dbUrl);
-  var self = this;
-  return {
+  var self =  {
     storeCrawl: function(crawl) {
       return new Promise(function(resolve, reject) {
         var key = moment(crawl.start).valueOf() + '_' + moment(crawl.end).valueOf();
@@ -74,8 +73,10 @@ module.exports.init = function(dbUrl) {
           })
           .catch(reject);
         });
-    },    
+    }
   };
+
+  return self;
 }
 
 module.exports.utils = {
