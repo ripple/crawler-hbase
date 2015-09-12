@@ -16,6 +16,7 @@ function normalizeData(rows) {
 
 module.exports.init = function(dbUrl) {
   var hbase = require('./database').initHbase(dbUrl);
+  var self = this;
   return {
     storeCrawl: function(crawl) {
       return new Promise(function(resolve, reject) {
@@ -50,6 +51,30 @@ module.exports.init = function(dbUrl) {
           });
       });
     },
+
+    getLatestRow: function() {      
+      return new Promise(function(resolve, reject) {
+          self.getRows('0', '9', 1, true)
+          .then(function(rows) {
+            resolve(rows[0]);
+          })
+          .catch(reject);
+        });
+    },
+  
+    getRowByKey: function(key) {
+      return new Promise(function(resolve, reject) {
+          self.getRows(key, key)
+          .then(function(rows) {
+            if(rows.length) {
+              resolve(rows[0]);
+            } else {
+              reject("no rows with given key found");
+            }
+          })
+          .catch(reject);
+        });
+    },    
   };
 }
 
