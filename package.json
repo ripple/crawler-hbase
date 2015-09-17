@@ -1,6 +1,6 @@
 {
   "name": "crawler-hbase",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "a module to interact with the crawler tables stored in hbase",
   "main": "index.js",
   "scripts": {
