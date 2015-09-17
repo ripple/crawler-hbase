@@ -30,7 +30,7 @@ Stores newProcessedCrawl. oldProcessedCrawl is used to calculate the changes tha
 ###storeCrawlInfo(crawl, crawlKey)
 Store crawl info.
 
-###getCrawlInfo(crawlKey) {
+###getCrawlInfo(crawlKey)
 Get crawl info.
 
 ###buildNodeStats(newCrawl, oldCrawl)
@@ -77,8 +77,8 @@ Get key for crawl_node_stats table using node's public key and crawl key.
 Get key for connections table using crawl key and peers' public keys.
 
 ###getInAndOutGoingPeers(connections)
-connections is an object representing all connections in one crawl. Each key is a <from,to> string
-Get in and outgoing links in the following format:
+connections is an object representing all connections in one crawl. Each key is a <from,to> string.
+The function returns in and outgoing links in the following format:
 ```javascript
 {
 	ingoings : <a mapping where each node is mapped to an array of its ingoing connections>
