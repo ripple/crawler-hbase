@@ -8,43 +8,43 @@ var HbaseClient = require("crawler-hbase").Client;
 var client = new HbaseClient("0.0.0.0:9090");
 ```
 
-### CrawlHbaseClient(dbUrl)
+#### CrawlHbaseClient(dbUrl)
 Constructs the client using the provided hbase dbUrl. It is assumed that there is Hbase-thrift running on the provided dbUrl.
 
 
-###storeRawCrawl(crawl)
+#### storeRawCrawl(crawl)
 Stores a raw crawl into table raw_crawls.
 
-###getRows(startKey, endKey, limit, descending, tableName, filterString)
+#### getRows(startKey, endKey, limit, descending, tableName, filterString)
 The generic get function used by almost all the other specific gets
 
-###getLatestRawCrawl()
+#### getLatestRawCrawl()
 Returns the latest raw crawl.
 
-###getRawCrawlByKey(key)
+#### getRawCrawlByKey(key)
 Gets a raw crawl by key.
 
-###storeProcessedCrawl(newProcessedCrawl, oldProcessedCrawl)
-Stores newProcessedCrawl. oldProcessedCrawl is used to calculate the changes that happened between the two crawls.
+#### storeProcessedCrawl(newCrawl, oldCrawl)
+Stores newCrawl. oldCrawl is used to calculate the changes that happened between the two crawls.
 
-###getCrawlInfo(crawlKey)
+#### getCrawlInfo(crawlKey)
 Get crawl info.
 
-###getNodeHistory(pubKey)
+#### getNodeHistory(pubKey)
 Get the array of all different versions tha given node appeared in crawls.
 
-###getCrawlNodeStats(crawlKey)
+#### getCrawlNodeStats(crawlKey)
 Get stats about the given nodes in the given crawl
 
-###getConnections(crawlKey, pubKey, type)
+#### getConnections(crawlKey, pubKey, type)
 Get links between nodes.
 
 
 ## Utils
 provides helper methods to work with hbase tables' keys which have a lot of hidden information in them.
 
-###keyToStart(key)
+#### keyToStart(key)
 Get crawl start time from crawl's key
 
-###keyToEnd(key)
+#### keyToEnd(key)
 Get crawl end time from crawl's key
