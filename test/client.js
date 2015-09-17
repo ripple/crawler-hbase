@@ -31,10 +31,10 @@ describe('hbaseHelper', function() {
     });
   });
 
-  describe('#getLatestRow', function() {
+  describe('#getLatestRawCrawl', function() {
     it('Should return an object with valid properties', function(done) {
       var client = new Client(dbUrl);
-      client.getLatestRow()
+      client.getLatestRawCrawl()
       .then(function(row) {
         expectToBeValidRow(row);
         done();
@@ -43,13 +43,13 @@ describe('hbaseHelper', function() {
     });
   });
 
-  describe('#getRowByKey', function() {
+  describe('#getRawCrawlByKey', function() {
     it('Should return an object with valid properties', function(done) {
       var client = new Client(dbUrl);
-      client.getLatestRow()
+      client.getLatestRawCrawl()
       .then(function(row) {
         var key = row.rowkey;
-        return client.getRowByKey(key);
+        return client.getRawCrawlByKey(key);
       })
       .then(function(row) {
         expectToBeValidRow(row);

@@ -63,7 +63,7 @@ CrawlHbaseClient.prototype.getRows = function(startKey, endKey, limit, descendin
   });
 };
 
-CrawlHbaseClient.prototype.getLatestRow = function() {
+CrawlHbaseClient.prototype.getLatestRawCrawl = function() {
   var self = this;
   return new Promise(function(resolve, reject) {
       self.getRows('0', '9', 1, true)
@@ -74,7 +74,7 @@ CrawlHbaseClient.prototype.getLatestRow = function() {
     });
 };
 
-CrawlHbaseClient.prototype.getRowByKey = function(key) {
+CrawlHbaseClient.prototype.getRawCrawlByKey = function(key) {
   var self = this;
   return new Promise(function(resolve, reject) {
       self.getRows(key, key)
