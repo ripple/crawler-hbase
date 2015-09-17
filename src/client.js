@@ -88,7 +88,17 @@ CrawlHbaseClient.prototype.getRawCrawlByKey = function(key) {
       .catch(reject);
     });
 };
-
+/**
+ * 
+ * @param  {Object} newProcessedCrawl - is in the following format 
+ * {
+ *   crawl: <id, start, end, entry>,
+ *   rippleds: <array of rippleds>
+ *   connections: <Object with keys as links between rippleds>
+ * }
+ * @param  {Object} oldProcessedCrawl - same format as newProcessedCrawl
+ * @return {[type]}                   [description]
+ */
 CrawlHbaseClient.prototype.storeProcessedCrawl = function(newProcessedCrawl, oldProcessedCrawl) {
   var self = this;
   return new Promise(function(resolve, reject) {
@@ -110,7 +120,7 @@ CrawlHbaseClient.prototype.storeProcessedCrawl = function(newProcessedCrawl, old
 
 CrawlHbaseClient.prototype.storeCrawlInfo = function(crawl, crawlKey) {
   var cols = {
-    'c:entry': crawl.entry || '',
+    'c:entry': crawl.entry || 'not_present',
   };
   return hbase.putRow('crawls', crawlKey, cols);
 };
@@ -144,7 +154,7 @@ CrawlHbaseClient.prototype.buildNodeStats = function(newCrawl, oldCrawl) {
     var ret = {};
     ret.exceptions = n.errors;
     ret.uptime = n.uptime;
-    //TODO request_time
+    ret.request_time = n.request_time;
     ret.in_count = n.in;
     ret.out_count = n.out;
     ret.ipp = n.ipp;

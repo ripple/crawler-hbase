@@ -62,9 +62,9 @@ describe('hbaseHelper', function() {
   describe('#buildChangedNodes', function() {
     it('Should return a valid changed nodes object', function() {
       var client = new Client(dbUrl);
-      var oldPC = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/processedCrawl1.json')));
+      var oldPC;// = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/processedCrawl1.json')));
       var newPC = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/processedCrawl2.json')));
-      var changedNodes = client.buildChangedNodes(newPC.rippleds, oldPC.rippleds);
+      var changedNodes = client.buildChangedNodes(newPC && newPC.rippleds, oldPC && oldPC.rippleds);
       expect(changedNodes).to.be.an('object');
     });
   });
@@ -165,6 +165,9 @@ describe('hbaseHelper', function() {
 
             expect(ns).to.have.property('out_count');
             expect(parseInt(ns.out_count, 10)).to.be.a('Number');
+
+            expect(ns).to.have.property('request_time');
+            expect(parseInt(ns.request_time, 10)).to.be.a('Number');
 
             expect(ns).to.have.property('pubkey');
             expect(ns.pubkey).to.be.a('string');
