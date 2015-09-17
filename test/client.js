@@ -23,6 +23,7 @@ function expectToBeValidRow(row) {
 }
 
 describe('hbaseHelper', function() {
+  this.timeout(6000);
   var dbUrl = process.env.HBASE_URL;
   describe('#init', function() {
     it('Shouldn\'t throw an error when given valid dbUrl', function(done) {
@@ -110,7 +111,7 @@ describe('hbaseHelper', function() {
     });
   });
 
-  describe('#storeProcessedCrawl', function() {
+  describe.skip('#storeProcessedCrawl', function() {
     it('Should store a processed crawl and return the key', function(done) {
       var client = new Client(dbUrl);
       var oldPC = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/processedCrawl1.json'), 'utf8'));
