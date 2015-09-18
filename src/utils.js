@@ -21,6 +21,14 @@ module.exports = {
     getConnectionKey: function(crawlKey, fromPubKey, toPubKey) {
       return crawlKey + '+' + fromPubKey + '+' + toPubKey;
     },
+
+    getTargetByConnectionKey: function(conKey) {
+      return conKey.split('+')[2];
+    },
+
+    getSourceByConnectionKey: function(conKey) {
+      return conKey.split('+')[1];
+    },
     
     /**
      * @param  {Object} connections - each key is <from,to> string

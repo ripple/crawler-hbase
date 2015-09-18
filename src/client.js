@@ -279,4 +279,11 @@ CrawlHbaseClient.prototype.getConnections = function(crawlKey, pubKey, type) {
   return self.getRows(startKey, stopKey, false, false, 'connections', fs);
 };
 
+CrawlHbaseClient.prototype.getAllConnections = function(crawlKey) {
+  var self = this;
+  var startKey = utils.getConnectionKey(crawlKey, '0', '0');
+  var stopKey = utils.getConnectionKey(crawlKey, 'z', 'z');    
+  return self.getRows(startKey, stopKey, false, false, 'connections');
+};
+
 module.exports = CrawlHbaseClient;

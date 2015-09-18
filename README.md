@@ -37,8 +37,10 @@ Get the array of all different versions tha given node appeared in crawls.
 Get stats about the given nodes in the given crawl
 
 #### getConnections(crawlKey, pubKey, type)
-Get links between nodes.
+Get links between nodes. type is either 'in' or 'out' to get ingoing or outgoing connections respectively.
 
+#### getAllConnections(crawlKey)
+Get all links for the given crawl
 
 ## Utils
 provides helper methods to work with hbase tables' keys which have a lot of hidden information in them.

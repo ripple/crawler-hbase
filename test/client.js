@@ -210,7 +210,7 @@ describe('hbaseHelper', function() {
 
 
   describe('#getConnections', function() {
-    it('Should get valid OUTgoing connections', function(done) {
+    it('Should get valid OUTgoing connections for the latest crawl', function(done) {
       var client = new Client(dbUrl);
       client.getCrawlInfo()
       .then(function(crawlInfo) {
@@ -235,7 +235,7 @@ describe('hbaseHelper', function() {
       .catch(done);
     });
 
-    it('Should get valid INgoing connections', function(done) {
+    it('Should get valid INgoing connections for the latest crawl', function(done) {
       var client = new Client(dbUrl);
       client.getCrawlInfo()
       .then(function(crawlInfo) {
@@ -260,4 +260,33 @@ describe('hbaseHelper', function() {
       .catch(done);
     });
   });
+
+describe('#getAllConnections', function() {
+    it('Should get valid connections for the latest crawl', function(done) {
+      var client = new Client(dbUrl);
+      client.getCrawlInfo()
+      .then(function(crawlInfo) {
+        var crawlKey = crawlInfo.rowkey;
+        client.getCrawlNodeStats(crawlKey)
+        .then(function(nodeStats) {
+          var pubKey = nodeStats[0].pubkey;
+          client.getAllConnections(crawlKey)
+          .then(function(allConections) {
+            console.log(allConections);
+            expect(allConections).to.be.an('Array');
+            _.each(allConections, function(oc) {
+              expect(oc).to.have.property('to');
+              expect(oc.to).to.be.a('string');
+
+              expect(oc).to.have.property('rowkey');
+              expect(oc.rowkey).to.be.a('string');
+            })
+            done();
+          })
+        })
+      })
+      .catch(done);
+    });
+  });
+
 });
