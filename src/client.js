@@ -2,7 +2,7 @@ var Promise = require('bluebird');
 var moment = require('moment');
 var _ = require('lodash');
 var utils = require('./utils');
-var hbase;
+
 
 function normalizeData(rows) {
   function normOne(r) {
@@ -15,10 +15,12 @@ function normalizeData(rows) {
 }
 
 function CrawlHbaseClient(dbUrl) {
-  hbase = require('./database').initHbase(dbUrl);
+  this._hbase = require('./database').initHbase(dbUrl);
 }
 
+
 CrawlHbaseClient.prototype.storeRawCrawl = function(crawl) {
+  var self = this;
   return new Promise(function(resolve, reject) {
     var key = moment(crawl.start).valueOf() + '_' + moment(crawl.end).valueOf();
     var cols = {
@@ -26,7 +28,7 @@ CrawlHbaseClient.prototype.storeRawCrawl = function(crawl) {
       'rc:data':       JSON.stringify(crawl.data),
       'rc:exceptions': JSON.stringify(crawl.errors)
     };
-    hbase
+    self._hbase
     .putRow('raw_crawls', key, cols)
     .then(function() {
       resolve(key);
@@ -47,6 +49,7 @@ CrawlHbaseClient.prototype.storeRawCrawl = function(crawl) {
  */
 CrawlHbaseClient.prototype.getRows = function(startKey, endKey, limit, descending, tableName, filterString) {
   tableName = tableName || 'raw_crawls';
+  var self = this;
   return new Promise(function(resolve, reject) {
     var options = {
         table: tableName,
@@ -56,7 +59,7 @@ CrawlHbaseClient.prototype.getRows = function(startKey, endKey, limit, descendin
     if (descending) options.descending = true;
     if (limit) options.limit = limit;
     if (filterString) options.filterString = filterString;
-    hbase.getScan(options, function(err, resp) {
+    self._hbase.getScan(options, function(err, resp) {
       if (err) return reject(err);
       return resolve(normalizeData(resp));
     });
@@ -119,10 +122,11 @@ CrawlHbaseClient.prototype.storeProcessedCrawl = function(newProcessedCrawl, old
 };
 
 CrawlHbaseClient.prototype.storeCrawlInfo = function(crawl, crawlKey) {
+  var self = this;
   var cols = {
     'c:entry': crawl.entry || 'not_present',
   };
-  return hbase.putRow('crawls', crawlKey, cols);
+  return self._hbase.putRow('crawls', crawlKey, cols);
 };
 
 /**
@@ -202,6 +206,7 @@ CrawlHbaseClient.prototype.buildChangedNodes = function(newNodes, oldNodes) {
 };
 
 CrawlHbaseClient.prototype.storeChangedNodes = function(nodes, crawlKey) {
+  var self = this;
   var rows = _.object(_.map(nodes, function(n, pubKey) {
     var key = utils.getNodesKey(crawlKey, pubKey);
     var cols = {
@@ -210,7 +215,7 @@ CrawlHbaseClient.prototype.storeChangedNodes = function(nodes, crawlKey) {
     };
     return [key, cols];
   }));
-  return hbase.putRows('nodes', rows);
+  return self._hbase.putRows('nodes', rows);
 };
 
 CrawlHbaseClient.prototype.getNodeHistory = function(pubKey) {
@@ -221,6 +226,7 @@ CrawlHbaseClient.prototype.getNodeHistory = function(pubKey) {
 };
 
 CrawlHbaseClient.prototype.storeCrawlNodeStats = function(nodes, crawlKey) {
+  var self = this;
   var rows = _.object(_.map(nodes, function(n, pubKey) {
     var key = utils.getCrawlNodeStatsKey(crawlKey, pubKey);
     var cols = {
@@ -239,7 +245,7 @@ CrawlHbaseClient.prototype.storeCrawlNodeStats = function(nodes, crawlKey) {
     };
     return [key, cols];
   }));
-  return hbase.putRows('crawl_node_stats', rows);
+  return self._hbase.putRows('crawl_node_stats', rows);
 };
 
 CrawlHbaseClient.prototype.getCrawlNodeStats = function(crawlKey) {
@@ -251,6 +257,7 @@ CrawlHbaseClient.prototype.getCrawlNodeStats = function(crawlKey) {
 
 
 CrawlHbaseClient.prototype.storeConnections = function(connections, crawlKey) {
+  var self = this;
   var rows = _.object(_.map(connections, function(val, from_to) {
     var from = from_to.split(',')[0];
     var to = from_to.split(',')[1];
@@ -260,7 +267,7 @@ CrawlHbaseClient.prototype.storeConnections = function(connections, crawlKey) {
     };
     return [key, cols];
   }));
-  return hbase.putRows('connections', rows);
+  return self._hbase.putRows('connections', rows);
 };
 
 CrawlHbaseClient.prototype.getConnections = function(crawlKey, pubKey, type) {
@@ -269,7 +276,7 @@ CrawlHbaseClient.prototype.getConnections = function(crawlKey, pubKey, type) {
   var fs;
   if(type === 'in') {
     //going to use column filter for this case
-    fs = hbase.buildSingleColumnValueFilters([{family:'cn', qualifier: 'to', comparator: "=", value: pubKey}]);
+    fs = self._hbase.buildSingleColumnValueFilters([{family:'cn', qualifier: 'to', comparator: "=", value: pubKey}]);
     startKey = utils.getConnectionKey(crawlKey, '0', '0');
     stopKey = utils.getConnectionKey(crawlKey, 'z', 'z');
   } else {

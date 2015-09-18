@@ -148,6 +148,7 @@ describe('hbaseHelper', function() {
         client.getCrawlNodeStats(crawlKey)
         .then(function(nodeStats) {
           expect(nodeStats).to.be.an('Array');
+          expect(nodeStats.length).to.be.above(0);
           _.each(nodeStats, function (ns) {
             expect(ns).to.have.property('in_add_count');
             expect(parseInt(ns.in_add_count, 10)).to.be.a('Number');
@@ -194,7 +195,8 @@ describe('hbaseHelper', function() {
       var pubkey = 'n9MjZdu3oBsE1YbE9sQjE2oaBPFnPevPn8ouDznRjdSZu3Zpiep6';
       client.getNodeHistory(pubkey)
       .then(function(nodeHistory) {
-        expect(nodeHistory).to.be.an('Array')
+        expect(nodeHistory).to.be.an('Array');
+        expect(nodeHistory.length).to.be.above(0);
         _.each(nodeHistory, function(nh) {
           expect(nh).to.have.property('ipp');
           expect(nh.ipp).to.be.a('string');
@@ -272,8 +274,8 @@ describe('#getAllConnections', function() {
           var pubKey = nodeStats[0].pubkey;
           client.getAllConnections(crawlKey)
           .then(function(allConections) {
-            console.log(allConections);
             expect(allConections).to.be.an('Array');
+            expect(allConections.length).to.be.above(0);
             _.each(allConections, function(oc) {
               expect(oc).to.have.property('to');
               expect(oc.to).to.be.a('string');
