@@ -108,12 +108,14 @@ CrawlHbaseClient.prototype.storeProcessedCrawl = function(newProcessedCrawl, old
     var crawlKey = newProcessedCrawl.crawl.id;
     var changedNodes = self.buildChangedNodes(newProcessedCrawl.rippleds, oldProcessedCrawl && oldProcessedCrawl.rippleds);
     var nodeStats = self.buildNodeStats(newProcessedCrawl, oldProcessedCrawl);
-    Promise.all([
-      self.storeCrawlInfo(newProcessedCrawl.crawl, crawlKey),
+    Promise.all([      
       self.storeChangedNodes(changedNodes, crawlKey),
       self.storeCrawlNodeStats(nodeStats, crawlKey),
       self.storeConnections(newProcessedCrawl.connections, crawlKey),
     ])
+    .then(function(retArray) {
+      return self.storeCrawlInfo(newProcessedCrawl.crawl, crawlKey),      
+    })
     .then(function(retArray) {
       resolve(crawlKey);
     })
