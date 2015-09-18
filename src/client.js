@@ -167,19 +167,19 @@ CrawlHbaseClient.prototype.buildNodeStats = function(newCrawl, oldCrawl) {
 
 
     var addedInPeers = _.filter(np.ingoings[pubKey], function(inPeer) {
-      return !op.ingoings[pubKey] || op.ingoings[pubKey].indexOf(inPeer) !== -1;
+      return !op.ingoings[pubKey] || op.ingoings[pubKey].indexOf(inPeer) === -1;
     });
 
     var addedOutPeers = _.filter(np.outgoings[pubKey], function(outPeer) {
-      return !op.outgoings[pubKey] || op.outgoings[pubKey].indexOf(outPeer) !== -1;
+      return !op.outgoings[pubKey] || op.outgoings[pubKey].indexOf(outPeer) === -1;
     });
 
     var droppedInPeers = _.filter(op.ingoings[pubKey], function(inPeer) {
-      return !np.ingoings[pubKey] || np.ingoings[pubKey].indexOf(inPeer) !== -1;
+      return !np.ingoings[pubKey] || np.ingoings[pubKey].indexOf(inPeer) === -1;
     });
 
     var droppedOutPeers = _.filter(op.outgoings[pubKey], function(outPeer) {
-      return !np.outgoings[pubKey] || np.outgoings[pubKey].indexOf(outPeer) !== -1;
+      return !np.outgoings[pubKey] || np.outgoings[pubKey].indexOf(outPeer) === -1;
     });
     ret.in_add_count = addedInPeers.length;
     ret.out_add_count = addedOutPeers.length;
