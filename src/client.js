@@ -114,7 +114,7 @@ CrawlHbaseClient.prototype.storeProcessedCrawl = function(newProcessedCrawl, old
       self.storeConnections(newProcessedCrawl.connections, crawlKey),
     ])
     .then(function(retArray) {
-      return self.storeCrawlInfo(newProcessedCrawl.crawl, crawlKey),      
+      return self.storeCrawlInfo(newProcessedCrawl.crawl, crawlKey);
     })
     .then(function(retArray) {
       resolve(crawlKey);
