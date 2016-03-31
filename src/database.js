@@ -1,6 +1,8 @@
 'use strict';
 var HBase = require('./hbase-thrift');
 var hbaseInstances = {};
+var prefix = process.env.PREFIX;
+
 module.exports = {
   /**
    * returns hbase client.
@@ -12,6 +14,7 @@ module.exports = {
   initHbase: function(dbUrl) {
     if (!hbaseInstances[dbUrl]) {
       hbaseInstances[dbUrl] = new HBase({
+        prefix: prefix,
         logLevel: 1,
         servers: [{
             host: dbUrl.split(':')[0],
