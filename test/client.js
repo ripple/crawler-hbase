@@ -6,6 +6,10 @@ var fs = require('fs');
 var path = require('path');
 var _ = require('lodash');
 
+var oldPC = require('./data/processedCrawl1.json');
+var newPC = require('./data/processedCrawl2.json');
+var rawCrawl = require('./data/rawCrawl2.json');
+
 function expectToBeValidRow(row) {
     expect(row).to.be.an('object');
 
@@ -22,6 +26,19 @@ function expectToBeValidRow(row) {
     expect(row.exceptions).to.be.a('string');
 }
 
+describe('setup tables', function() {
+  it ('should initialize tables', function(done) {
+    this.timeout(30000);
+    var dbUrl = process.env.HBASE_URL;
+    var client = new Client(dbUrl);
+    client.initTables(true)
+    .then(function() {
+      done();
+    })
+    .catch(done)
+  });
+});
+
 describe('hbaseHelper', function() {
   this.timeout(6000);
   var dbUrl = process.env.HBASE_URL;
@@ -29,6 +46,32 @@ describe('hbaseHelper', function() {
     it('Shouldn\'t throw an error when given valid dbUrl', function(done) {
       var client = new Client(dbUrl);
       done();
+    });
+  });
+
+  describe('#storeRawCrawl', function() {
+    it('Should store a raw crawl', function(done) {
+      var client = new Client(dbUrl);
+
+      client.storeRawCrawl(rawCrawl)
+      .then(function(crawlKey) {
+        expect(crawlKey).to.be.a('string');
+        done();
+      })
+      .catch(done);
+    });
+  });
+
+  describe('#storeProcessedCrawl', function() {
+    it('Should store a processed crawl and return the key', function(done) {
+      var client = new Client(dbUrl);
+
+      client.storeProcessedCrawl(newPC, oldPC)
+      .then(function(crawlKey) {
+        expect(crawlKey).to.be.a('string');
+        done();
+      })
+      .catch(done);
     });
   });
 
@@ -63,8 +106,6 @@ describe('hbaseHelper', function() {
   describe('#buildChangedNodes', function() {
     it('Should return a valid changed nodes object', function() {
       var client = new Client(dbUrl);
-      var oldPC;// = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/processedCrawl1.json')));
-      var newPC = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/processedCrawl2.json')));
       var changedNodes = client.buildChangedNodes(newPC && newPC.rippleds, oldPC && oldPC.rippleds);
       expect(changedNodes).to.be.an('object');
     });
@@ -73,8 +114,6 @@ describe('hbaseHelper', function() {
   describe('#buildNodeStats', function() {
     it('Should return a valid node stats object', function() {
       var client = new Client(dbUrl);
-      var oldPC = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/processedCrawl1.json'), 'utf8'));
-      var newPC = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/processedCrawl2.json'), 'utf8'));
 
       var nodeStats = client.buildNodeStats(newPC, oldPC);
       expect(nodeStats).to.be.an('object');
@@ -111,21 +150,6 @@ describe('hbaseHelper', function() {
     });
   });
 
-  describe.skip('#storeProcessedCrawl', function() {
-    it('Should store a processed crawl and return the key', function(done) {
-      var client = new Client(dbUrl);
-      var oldPC = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/processedCrawl1.json'), 'utf8'));
-      var newPC = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/processedCrawl2.json'), 'utf8'));
-
-      client.storeProcessedCrawl(newPC, oldPC)
-      .then(function(crawlKey) {
-        expect(crawlKey).to.be.a('string');
-        done();
-      })
-      .catch(done);
-    });
-  });
- 
   describe('#getCrawlInfo', function() {
     it('Should get info of the latest processed crawl', function(done) {
       var client = new Client(dbUrl);
@@ -181,7 +205,7 @@ describe('hbaseHelper', function() {
             expect(ns.version || '').to.be.a('string');
 
             expect(parseInt(ns.uptime, 10) || 0).to.be.a('Number')
-          });          
+          });
           done();
         })
       })
@@ -204,6 +228,22 @@ describe('hbaseHelper', function() {
           expect(nh).to.have.property('version');
           expect(nh.version).to.be.a('string');
         });
+        done();
+      })
+      .catch(done);
+    });
+  });
+
+  describe('#getNodeState', function() {
+    it('Should get current state of the provided node', function(done) {
+      var client = new Client(dbUrl);
+      var pubkey = 'n9MjZdu3oBsE1YbE9sQjE2oaBPFnPevPn8ouDznRjdSZu3Zpiep6';
+      client.getNodeState(pubkey)
+      .then(function(state) {
+        expect(state.node_pubkey).to.be.a('string');
+        expect(state.ipp).to.be.a('string');
+        expect(state.version).to.be.a('string');
+        expect(state.last_updated).to.be.a('string');
         done();
       })
       .catch(done);

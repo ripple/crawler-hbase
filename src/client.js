@@ -3,6 +3,32 @@ var moment = require('moment');
 var _ = require('lodash');
 var utils = require('./utils');
 
+var tableList = [
+  {
+    name: 'crawls',
+    columnFamilies: ['c']
+  },
+  {
+    name: 'connections',
+    columnFamilies: ['cn']
+  },
+  {
+    name: 'crawl_node_stats',
+    columnFamilies: ['s']
+  },
+  {
+    name: 'raw_crawls',
+    columnFamilies: ['rc']
+  },
+  {
+    name: 'nodes',
+    columnFamilies: ['n']
+  },
+  {
+    name: 'node_state',
+    columnFamilies: ['n']
+  }
+];
 
 function normalizeData(rows) {
   function normOne(r) {
@@ -18,6 +44,24 @@ function CrawlHbaseClient(dbUrl) {
   this._hbase = require('./database').initHbase(dbUrl);
 }
 
+CrawlHbaseClient.prototype.initTables = function(recreate) {
+  var self = this;
+
+  if (recreate) {
+    return Promise.map(tableList, function(table) {
+      return self._hbase.deleteTable(table);
+    }).then(createTables);
+
+  } else {
+    return createTables();
+  }
+
+  function createTables() {
+    return Promise.map(tableList, function(table) {
+      return self._hbase.createTable(table);
+    });
+  }
+};
 
 CrawlHbaseClient.prototype.storeRawCrawl = function(crawl) {
   var self = this;
@@ -29,7 +73,11 @@ CrawlHbaseClient.prototype.storeRawCrawl = function(crawl) {
       'rc:exceptions': JSON.stringify(crawl.errors)
     };
     self._hbase
-    .putRow('raw_crawls', key, cols)
+    .putRow({
+      table: 'raw_crawls',
+      rowkey: key,
+      columns: cols
+    })
     .then(function() {
       resolve(key);
     })
@@ -39,13 +87,13 @@ CrawlHbaseClient.prototype.storeRawCrawl = function(crawl) {
 
 /**
  * the generic get function used by almost all the other specific gets
- * @param  {string} startKey - scan start 
- * @param  {string} endKey  - scan end   
- * @param  {number} limit - limit results    
+ * @param  {string} startKey - scan start
+ * @param  {string} endKey  - scan end
+ * @param  {number} limit - limit results
  * @param  {bool} descending - order DESC
  * @param  {string} tableName  - table to use
  * @param  {string} filterString - filter for scanner
- * @return {Array}            
+ * @return {Array}
  */
 CrawlHbaseClient.prototype.getRows = function(startKey, endKey, limit, descending, tableName, filterString) {
   tableName = tableName || 'raw_crawls';
@@ -66,15 +114,28 @@ CrawlHbaseClient.prototype.getRows = function(startKey, endKey, limit, descendin
   });
 };
 
+CrawlHbaseClient.prototype.getRow = function(options) {
+  var self = this;
+  return new Promise(function(resolve, reject) {
+    self._hbase.getRow(options, function(err, resp) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(normalizeData(resp));
+      }
+    });
+  });
+};
+
 CrawlHbaseClient.prototype.getLatestRawCrawl = function() {
   var self = this;
   return new Promise(function(resolve, reject) {
-      self.getRows('0', '9', 1, true)
-      .then(function(rows) {
-        resolve(rows[0]);
-      })
-      .catch(reject);
-    });
+    self.getRows('0', '9', 1, true)
+    .then(function(rows) {
+      resolve(rows[0]);
+    })
+    .catch(reject);
+  });
 };
 
 CrawlHbaseClient.prototype.getRawCrawlByKey = function(key) {
@@ -92,8 +153,8 @@ CrawlHbaseClient.prototype.getRawCrawlByKey = function(key) {
     });
 };
 /**
- * 
- * @param  {Object} newProcessedCrawl - is in the following format 
+ *
+ * @param  {Object} newProcessedCrawl - is in the following format
  * {
  *   crawl: <id, start, end, entry>,
  *   rippleds: <array of rippleds>
@@ -108,7 +169,7 @@ CrawlHbaseClient.prototype.storeProcessedCrawl = function(newProcessedCrawl, old
     var crawlKey = newProcessedCrawl.crawl.id;
     var changedNodes = self.buildChangedNodes(newProcessedCrawl.rippleds, oldProcessedCrawl && oldProcessedCrawl.rippleds);
     var nodeStats = self.buildNodeStats(newProcessedCrawl, oldProcessedCrawl);
-    Promise.all([      
+    Promise.all([
       self.storeChangedNodes(changedNodes, crawlKey),
       self.storeCrawlNodeStats(nodeStats, crawlKey),
       self.storeConnections(newProcessedCrawl.connections, crawlKey),
@@ -128,7 +189,11 @@ CrawlHbaseClient.prototype.storeCrawlInfo = function(crawl, crawlKey) {
   var cols = {
     'c:entry': crawl.entry || 'not_present',
   };
-  return self._hbase.putRow('crawls', crawlKey, cols);
+  return self._hbase.putRow({
+    table: 'crawls',
+    rowkey: crawlKey,
+    columns: cols
+  });
 };
 
 /**
@@ -136,24 +201,24 @@ CrawlHbaseClient.prototype.storeCrawlInfo = function(crawl, crawlKey) {
  * @param  {string} crawlKey
  * @return {Object}
  */
-CrawlHbaseClient.prototype.getCrawlInfo = function(crawlKey) {  
+CrawlHbaseClient.prototype.getCrawlInfo = function(crawlKey) {
   var self = this;
   return new Promise(function(resolve, reject) {
     crawlKey = crawlKey || '9';
-      self.getRows('0', crawlKey, 1, true, 'crawls')
-      .then(function(rows) {
-        if (rows.length) {
-          resolve(rows[0]);
-        } else {
-          reject('no crawls with given key found');
-        }
-      })
-      .catch(reject);
-    });  
+    self.getRows('0', crawlKey, 1, true, 'crawls')
+    .then(function(rows) {
+      if (rows.length) {
+        resolve(rows[0]);
+      } else {
+        reject('no crawls with given key found');
+      }
+    })
+    .catch(reject);
+  });
 };
 
 CrawlHbaseClient.prototype.buildNodeStats = function(newCrawl, oldCrawl) {
-  var np = utils.getInAndOutGoingPeers(newCrawl.connections);  
+  var np = utils.getInAndOutGoingPeers(newCrawl.connections);
   var op = utils.getInAndOutGoingPeers(oldCrawl && oldCrawl.connections);
 
   var nodeStats = _.mapValues(newCrawl.rippleds, function(n, pubKey) {
@@ -186,7 +251,7 @@ CrawlHbaseClient.prototype.buildNodeStats = function(newCrawl, oldCrawl) {
     ret.in_add_count = addedInPeers.length;
     ret.out_add_count = addedOutPeers.length;
     ret.in_drop_count = droppedInPeers.length;
-    ret.out_drop_count = droppedOutPeers.length;    
+    ret.out_drop_count = droppedOutPeers.length;
     return ret;
   });
 
@@ -197,7 +262,7 @@ CrawlHbaseClient.prototype.buildNodeStats = function(newCrawl, oldCrawl) {
  * returns the nodes that either just appeared or have changed since last crawl
  * @param  {Object} newCrawl
  * @param  {Object} oldCrawl
- * @return {Object}         
+ * @return {Object}
  */
 CrawlHbaseClient.prototype.buildChangedNodes = function(newNodes, oldNodes) {
   var changedNodes = _.pick(newNodes, function(nn, pubKey) {
@@ -209,15 +274,31 @@ CrawlHbaseClient.prototype.buildChangedNodes = function(newNodes, oldNodes) {
 
 CrawlHbaseClient.prototype.storeChangedNodes = function(nodes, crawlKey) {
   var self = this;
-  var rows = _.object(_.map(nodes, function(n, pubKey) {
-    var key = utils.getNodesKey(crawlKey, pubKey);
-    var cols = {
-      'n:ipp': n.ipp || 'not_present',
-      'n:version': n.version || 'not_present',
+  var changedNodes = {};
+  var nodeState = {};
+  var cols;
+
+  for (var pubkey in nodes) {
+    changedNodes[utils.getNodesKey(crawlKey, pubkey)] = {
+      'n:ipp': nodes[pubkey].ipp || 'not_present',
+      'n:version': nodes[pubkey].version || 'not_present',
     };
-    return [key, cols];
-  }));
-  return self._hbase.putRows('nodes', rows);
+    nodeState[pubkey] = {
+      'n:ipp': nodes[pubkey].ipp || 'not_present',
+      'n:version': nodes[pubkey].version || 'not_present',
+      'n:last_updated': moment().utc().format('YYYYY-MM-DDTHH:mm:ss[Z]')
+    };
+  }
+
+  return self._hbase.putRows({
+    table: 'nodes',
+    rows: changedNodes
+  }).then(function() {
+    return self._hbase.putRows({
+      table: 'node_state',
+      rows: nodeState
+    });
+  })
 };
 
 CrawlHbaseClient.prototype.getNodeHistory = function(pubKey) {
@@ -225,6 +306,18 @@ CrawlHbaseClient.prototype.getNodeHistory = function(pubKey) {
   var startKey = utils.getNodesKey('0', pubKey);
   var stopKey = utils.getNodesKey('9', pubKey);
   return self.getRows(startKey, stopKey, false, false, 'nodes');
+};
+
+CrawlHbaseClient.prototype.getNodeState = function(pubKey) {
+  var self = this;
+  return self.getRow({
+    table: 'node_state',
+    rowkey: pubKey
+  }).then(function(row) {
+    row.node_pubkey = row.rowkey;
+    delete row.rowkey;
+    return row;
+  });
 };
 
 CrawlHbaseClient.prototype.storeCrawlNodeStats = function(nodes, crawlKey) {
@@ -247,7 +340,10 @@ CrawlHbaseClient.prototype.storeCrawlNodeStats = function(nodes, crawlKey) {
     };
     return [key, cols];
   }));
-  return self._hbase.putRows('crawl_node_stats', rows);
+  return self._hbase.putRows({
+    table: 'crawl_node_stats',
+    rows: rows
+  });
 };
 
 CrawlHbaseClient.prototype.getCrawlNodeStats = function(crawlKey) {
@@ -269,7 +365,10 @@ CrawlHbaseClient.prototype.storeConnections = function(connections, crawlKey) {
     };
     return [key, cols];
   }));
-  return self._hbase.putRows('connections', rows);
+  return self._hbase.putRows({
+    table: 'connections',
+    rows: rows
+  });
 };
 
 CrawlHbaseClient.prototype.getConnections = function(crawlKey, pubKey, type) {
@@ -283,7 +382,7 @@ CrawlHbaseClient.prototype.getConnections = function(crawlKey, pubKey, type) {
     stopKey = utils.getConnectionKey(crawlKey, 'z', 'z');
   } else {
     startKey = utils.getConnectionKey(crawlKey, pubKey, '0');
-    stopKey = utils.getConnectionKey(crawlKey, pubKey, 'z');    
+    stopKey = utils.getConnectionKey(crawlKey, pubKey, 'z');
   }
   return self.getRows(startKey, stopKey, false, false, 'connections', fs);
 };
@@ -291,7 +390,7 @@ CrawlHbaseClient.prototype.getConnections = function(crawlKey, pubKey, type) {
 CrawlHbaseClient.prototype.getAllConnections = function(crawlKey) {
   var self = this;
   var startKey = utils.getConnectionKey(crawlKey, '0', '0');
-  var stopKey = utils.getConnectionKey(crawlKey, 'z', 'z');    
+  var stopKey = utils.getConnectionKey(crawlKey, 'z', 'z');
   return self.getRows(startKey, stopKey, false, false, 'connections');
 };
 

@@ -1,0 +1,8 @@
+webapp:
+  build: .
+  volumes:
+    - .:/usr/src/app
+  links:
+    - hbase
+hbase:
+  image: bwilsonripple/hbase

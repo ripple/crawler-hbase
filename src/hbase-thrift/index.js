@@ -4,6 +4,7 @@ var moment     = require('moment');
 var HBase      = require('./gen/Hbase');
 var HBaseTypes = require('./gen/Hbase_types');
 var Logger     = require('./logger');
+var Int64BE    = require('int64-buffer').Int64BE;
 
 /**
  * HbaseClient
@@ -15,6 +16,7 @@ var HbaseClient = function (options) {
 
   this.max_sockets = options.max_sockets || 1000;
   this._prefix     = options.prefix || '';
+  this._topologyPrefix = options.topologyPrefix || 'c'; //hack till we rename the tables
   this._servers    = options.servers || null;
   this._timeout    = options.timeout || 30000; //also acts as keepalive
   this._connection = null;
@@ -22,9 +24,10 @@ var HbaseClient = function (options) {
   this.logStats    = (!options.logLevel || options.logLevel > 2) ? true : false;
   this.log         = new Logger({
     scope: 'hbase-thrift',
-    level: options.logLevel || 0,
+    level: options.logLevel,
     file: options.logFile
   });
+
   this.pool = [ ];
 
   if (!this._servers) {
@@ -48,45 +51,44 @@ var HbaseClient = function (options) {
  * get an hbase connection from the pool
  */
 
-HbaseClient.prototype._getConnection = function(cb) {
+HbaseClient.prototype._getConnection = function(callback) {
   var self = this;
-  var connection;
 
-  var i = self.pool.length;
+  getOpenConnection(0, callback);
 
-  //look for a free socket
-  while (i--) {
-    if (self.pool[i].client &&
-        self.pool[i].connected &&
-        !Object.keys(self.pool[i].client._reqs).length &&
-        !self.pool[i].keep) {
+  function getOpenConnection(attempts, cb) {
+    var i = self.pool.length;
 
-      cb(null, self.pool[i]);
-      self.log.debug("# connections:", self.pool.length, ' - current:', i);
+    if (!attempts) {
+      attempts = 0;
+
+    } else if (attempts > 100) {
+      cb('unable to get open connection');
       return;
     }
-    /*
-    console.log(!!self.pool[i].client,
-                !!self.pool[i].connected,
-                !!self.pool[i].keep)
 
-    if (self.pool[i].client && Object.keys(self.pool[i].client._reqs).length) {
-      count++;
+
+    //look for a free socket
+    while (i--) {
+      if (self.pool[i].client &&
+          self.pool[i].connected &&
+          Object.keys(self.pool[i].client._reqs).length < 10 &&
+          !self.pool[i].keep) {
+
+        cb(null, self.pool[i]);
+        self.log.debug("# connections:", self.pool.length, ' - current:', i);
+        return;
+      }
     }
-    */
+
+    //open a new socket if there is room in the pool
+    if (self.pool.length < self.max_sockets) {
+      openNewSocket(self.pool.length % self._servers.length);
+    }
+
+    //recheck for connected socket
+    setTimeout(getOpenConnection.bind(self, attempts + 1, cb), 50);
   }
-
-  //open a new socket if there is room in the pool
-  if (self.pool.length < self.max_sockets) {
-    openNewSocket(self.pool.length % self._servers.length);
-  }
-
-  //recheck for connected socket
-  setTimeout(function() {
-    self._getConnection(cb);
-  }, 20);
-
-  return;
 
   /**
    * openNewSocket
@@ -96,10 +98,10 @@ HbaseClient.prototype._getConnection = function(cb) {
     var server = self._servers[i || 0];
 
     //create new connection
-    connection = thrift.createConnection(server.host, server.port, {
-      transport : thrift.TFramedTransport,
-      protocol  : thrift.TBinaryProtocol,
-      timeout   : self._timeout
+    var connection = thrift.createConnection(server.host, server.port, {
+      transport: thrift.TFramedTransport,
+      protocol: thrift.TBinaryProtocol,
+      timeout : self._timeout
     });
 
 
@@ -131,7 +133,7 @@ HbaseClient.prototype._getConnection = function(cb) {
     self.pool.push(connection);
 
     connection.on('timeout', function() {
-      this.error('thrift connection timeout');
+      this.error('thrift client connection timeout');
     });
 
     connection.once('connect', function() {
@@ -144,7 +146,7 @@ HbaseClient.prototype._getConnection = function(cb) {
 
     connection.on('close', function() {
       this.error('hbase connection closed');
-    })
+    });
   }
 }
 
@@ -162,6 +164,7 @@ HbaseClient.prototype.iterator = function (options) {
   var error;
   var count = 0;
   var total = 0;
+
   //create scan
   self._getConnection(function(err, connection) {
     var swap;
@@ -278,9 +281,16 @@ HbaseClient.prototype.iterator = function (options) {
 HbaseClient.prototype.buildSingleColumnValueFilters = function (maybeFilters) {
   var filterString= maybeFilters.map( function(o) {
       if(o.value && o.qualifier) {
-        return ["SingleColumnValueFilter ('",o.family, "', '",
-                o.qualifier, "', ", o.comparator, ", 'binary:",
-                o.value, "')"].join('');
+        var filterMissing = o.filterMissing === false ? false : true;
+        var latest = o.latest === false ? false : true;
+
+        return ["SingleColumnValueFilter ('",
+                o.family, "', '",
+                o.qualifier, "', ",
+                o.comparator, ", 'binary:",
+                o.value, "', ",
+                filterMissing, ", ",
+                latest, ")"].join('');
       }
   }).filter(function(n){ return n!=undefined }).join(' AND ');
   return filterString;
@@ -360,7 +370,8 @@ function markerWrapper(f) {
 
 HbaseClient.prototype.getScan = function (options, callback) {
   var self     = this;
-  var table    = self._prefix + options.table;
+  var prefix   = options.prefix || self._prefix;
+  var table    = prefix + options.table;
   var scanOpts = { };
   var d        = Date.now();
   var scan;
@@ -501,9 +512,11 @@ HbaseClient.prototype.getScanWithMarker = markerWrapper(HbaseClient.prototype.ge
  * table into HBase
  */
 
-HbaseClient.prototype.putRows = function (table, rows) {
-  var self   = this;
-  var data   = [];
+HbaseClient.prototype.putRows = function (options) {
+  var self = this;
+  var prefix = options.prefix || self._prefix;
+  var table = prefix + options.table;
+  var data = [];
   var arrays = [];
   var columns;
   var name;
@@ -512,8 +525,8 @@ HbaseClient.prototype.putRows = function (table, rows) {
 
 
   //format rows
-  for (rowKey in rows) {
-    columns = self._prepareColumns(rows[rowKey]);
+  for (rowKey in options.rows) {
+    columns = self._prepareColumns(options.rows[rowKey]);
 
     if (!columns.length) {
       continue;
@@ -542,17 +555,17 @@ HbaseClient.prototype.putRows = function (table, rows) {
       self._getConnection(function(err, connection) {
 
         if (err) {
-          callback(err);
+          reject(err);
           return;
         }
 
-        connection.client.mutateRows(self._prefix + table, chunk, null, function(err, resp) {
+        connection.client.mutateRows(table, chunk, null, function(err, resp) {
           if (err) {
-            self.log.error(self._prefix + table, err, resp);
+            self.log.error(table, err, resp);
             reject(err);
 
           } else {
-            //self.log.info(self._prefix + table, "saved", chunk.length);
+            //self.log.info(table, "saved", chunk.length);
             resolve(data.length);
           }
         });
@@ -566,15 +579,44 @@ HbaseClient.prototype.putRows = function (table, rows) {
  * save a single row
  */
 
-HbaseClient.prototype.putRow = function (table, rowKey, data) {
-  var self    = this;
-  var columns = self._prepareColumns(data);
-  var put;
+HbaseClient.prototype.putRow = function (options) {
+  var self = this;
+  var prefix = options.prefix || self._prefix;
+  var table = prefix + options.table;
+  var columns = self._prepareColumns(options.columns);
 
   if (!columns.length) {
-    return Promise.resolve();
+    return Promise.reject('invalid column data');
   }
 
+  //promisify
+  return new Promise (function(resolve, reject) {
+    self._getConnection(function(err, connection) {
+
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      connection.client.mutateRow(table, options.rowkey, columns, null, function(err, resp) {
+        if (err) {
+          self.log.error(table, err, resp);
+          reject(err);
+
+        } else {
+          resolve(resp);
+        }
+      });
+    });
+  });
+}
+
+/**
+ * increment
+ */
+
+HbaseClient.prototype.increment = function (options) {
+  var self = this;
   //promisify
   return new Promise (function(resolve, reject) {
     self._getConnection(function(err, connection) {
@@ -584,9 +626,16 @@ HbaseClient.prototype.putRow = function (table, rowKey, data) {
         return;
       }
 
-      connection.client.mutateRow(self._prefix + table, rowKey, columns, null, function(err, resp) {
+      var increment = new HBaseTypes.TIncrement({
+        table: self._prefix + options.table,
+        row: options.rowkey,
+        column: 'inc:'+options.column,
+        ammount: 1
+      });
+
+      connection.client.increment(increment, function(err, resp) {
         if (err) {
-          self.log.error(self._prefix + table, err, resp);
+          self.log.error(self._prefix + options.table, err, resp);
           reject(err);
 
         } else {
@@ -602,8 +651,11 @@ HbaseClient.prototype.putRow = function (table, rowKey, data) {
  * delete a single row
  */
 
-HbaseClient.prototype.deleteRow = function (table, rowKey) {
+HbaseClient.prototype.deleteRow = function (options) {
   var self = this;
+  var prefix = options.prefix || self._prefix;
+  var table = prefix + options.table;
+
   //promisify
   return new Promise (function(resolve, reject) {
     self._getConnection(function(err, connection) {
@@ -613,9 +665,9 @@ HbaseClient.prototype.deleteRow = function (table, rowKey) {
         return;
       }
 
-      connection.client.deleteAllRow(self._prefix + table, rowKey, null, function(err, resp) {
+      connection.client.deleteAllRow(table, options.rowkey, null, function(err, resp) {
         if (err) {
-          self.log.error(self._prefix + table, err, resp);
+          self.log.error(table, err, resp);
           reject(err);
 
         } else {
@@ -632,13 +684,102 @@ HbaseClient.prototype.deleteRow = function (table, rowKey) {
  * in a table
  */
 
-HbaseClient.prototype.deleteRows = function (table, keys) {
+HbaseClient.prototype.deleteRows = function (options) {
   var self = this;
-  return Promise.map(keys, function(key) {
-    return self.deleteRow(table, key);
+
+  return Promise.map(options.rowkeys, function(rowkey) {
+    return self.deleteRow({
+      prefix: options.prefix,
+      table: options.table,
+      rowkey: rowkey
+    });
   }).then(function(resp) {
-    self.log.info(table, 'tables removed:', resp.length);
+    self.log.info(options.table, 'tables removed:', resp.length);
     return resp.length;
+  });
+}
+
+
+/**
+ * createTable
+ */
+
+HbaseClient.prototype.createTable = function (table) {
+  var self = this;
+
+  return new Promise(function(resolve, reject) {
+    self._getConnection(function(err, connection) {
+      var columnFamilies = [];
+      var prefix = table.prefix || self._prefix;
+      var name = prefix + table.name;
+
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      table.columnFamilies.forEach(function(d) {
+        columnFamilies.push(new HBaseTypes.ColumnDescriptor({
+          name: d
+        }));
+      });
+
+      connection.client.createTable(name, columnFamilies, function(err, resp) {
+        if (err && err.name === 'AlreadyExists') {
+          self.log.info(name, ' already exists');
+          resolve(true);
+        } else if (err) {
+          reject(err);
+        } else {
+          self.log.info(name, ' CREATED');
+          resolve(resp);
+        }
+      });
+    });
+  });
+}
+
+/**
+ * deleteTable
+ */
+
+HbaseClient.prototype.deleteTable = function (table) {
+  var self = this;
+
+  return new Promise(function(resolve, reject) {
+    self._getConnection(function(err, connection) {
+      var prefix = table.prefix || self._prefix;
+      var name = prefix + table.name;
+
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      connection.client.disableTable(name, function(err, resp) {
+
+        // nothing to do if the table doesnt exist
+        if (err && err.message.indexOf('TableNotFoundException') !== -1) {
+          self.log.info(name, ' does not exist');
+          resolve(true);
+          return;
+
+        // reject if error other than not enabled
+        } else if (err && err.message.indexOf('TableNotEnabledException') === -1) {
+          reject(err);
+          return;
+        }
+
+        connection.client.deleteTable(name, function(err, resp) {
+          if (err) {
+            reject(err);
+          } else {
+            self.log.info(name, ' REMOVED');
+            resolve(resp);
+          }
+        });
+      });
+    });
   });
 }
 
@@ -649,12 +790,14 @@ HbaseClient.prototype.deleteRows = function (table, keys) {
 HbaseClient.prototype.getRow = function(options, callback) {
   var self = this;
   var d = Date.now();
+  var prefix = options.prefix || self._prefix;
+  var table = prefix + options.table;
 
   function handleResponse(err, rows) {
 
     if (self.logStats) {
       d = (Date.now() - d) / 1000;
-      self.log.info('table:' + self._prefix + options.table,
+      self.log.info('table:' + table,
         'time:' + d + 's',
         rows ? 'rowcount:' + rows.length : '');
     }
@@ -670,13 +813,13 @@ HbaseClient.prototype.getRow = function(options, callback) {
     }
 
     if (options.columns) {
-      connection.client.getRowWithColumns(self._prefix + options.table,
+      connection.client.getRowWithColumns(table,
                                           options.rowkey,
                                           options.columns,
                                           null,
                                           handleResponse);
     } else {
-      connection.client.getRow(self._prefix + options.table,
+      connection.client.getRow(table,
                                options.rowkey,
                                null,
                                handleResponse);
@@ -687,11 +830,13 @@ HbaseClient.prototype.getRow = function(options, callback) {
 HbaseClient.prototype.getRows = function(options, callback) {
   var self = this;
   var d = Date.now();
+  var prefix = options.prefix || self._prefix;
+  var table = prefix + options.table;
 
   function handleResponse(err, rows) {
     if (self.logStats) {
       d = (Date.now() - d) / 1000;
-      self.log.info('table:' + self._prefix + options.table,
+      self.log.info('table:' + table,
       'time:' + d + 's',
       rows ? 'rowcount:' + rows.length : '');
     }
@@ -707,13 +852,13 @@ HbaseClient.prototype.getRows = function(options, callback) {
     }
 
     if (options.columns) {
-      connection.client.getRowsWithColumns(self._prefix + options.table,
+      connection.client.getRowsWithColumns(table,
                                            options.rowkeys,
                                            options.columns,
                                            null,
                                            handleResponse);
     } else {
-      connection.client.getRows(self._prefix + options.table,
+      connection.client.getRows(table,
                                 options.rowkeys,
                                 null,
                                 handleResponse);
@@ -770,19 +915,24 @@ HbaseClient.prototype._prepareColumns = function (data) {
   }
 };
 
+var Int64BE = require("int64-buffer").Int64BE;
 
 function formatRows(data, includeFamilies) {
   var rows = [];
   data.forEach(function(row) {
     r = {};
-    r.rowkey = row.row;
+    r.rowkey = row.row.toString('utf8');
     for (key in row.columns) {
       if (includeFamilies) {
-        r[key] = row.columns[key].value;
+        r[key] = row.columns[key].value.toString('utf8');
 
       } else {
         parts = key.split(':');
-        r[parts[1]] = row.columns[key].value;
+        if (parts[0] === 'inc') {
+          r[parts[1]] = Int64BE(row.columns[key].value).toString();
+        } else {
+          r[parts[1]] = row.columns[key].value.toString('utf8');
+        }
       }
     }
 

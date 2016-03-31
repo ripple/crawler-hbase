@@ -4,13 +4,14 @@
   "description": "a module to interact with the crawler tables stored in hbase",
   "main": "index.js",
   "scripts": {
-    "test": "mocha test/"
+    "test": "HBASE_URL=hbase:9090 PREFIX=test_ mocha test/"
   },
   "author": "Hayk Tepanyan",
   "license": "ISC",
   "dependencies": {
     "bluebird": "^2.10.0",
     "chai": "^3.2.0",
+    "int64-buffer": "^0.1.1",
     "lodash": "^3.10.1",
     "mocha": "^2.3.2",
     "moment": "^2.10.6",
