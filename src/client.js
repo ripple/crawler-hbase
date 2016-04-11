@@ -286,7 +286,7 @@ CrawlHbaseClient.prototype.storeChangedNodes = function(nodes, crawlKey) {
     nodeState[pubkey] = {
       'n:ipp': nodes[pubkey].ipp || 'not_present',
       'n:version': nodes[pubkey].version || 'not_present',
-      'n:last_updated': moment().utc().format('YYYYY-MM-DDTHH:mm:ss[Z]')
+      'n:last_updated': moment().utc().format('YYYY-MM-DDTHH:mm:ss[Z]')
     };
   }
 
